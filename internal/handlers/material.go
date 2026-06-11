@@ -44,7 +44,9 @@ func (h *MaterialHandler) Inbound(c *gin.Context) {
 
 	err = h.db.Transaction(func(tx *gorm.DB) error {
 		var existing models.Material
-		err := tx.Where("supplier = ? AND supplier_batch_no = ?", req.Supplier, req.SupplierBatchNo).First(&existing).Error
+		err := tx.Set("gorm:query_option", "FOR UPDATE").
+			Where("supplier = ? AND supplier_batch_no = ?", req.Supplier, req.SupplierBatchNo).
+			First(&existing).Error
 
 		if err == nil {
 			existing.InboundWeight += req.Weight

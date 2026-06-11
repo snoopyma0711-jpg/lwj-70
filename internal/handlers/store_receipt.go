@@ -34,7 +34,8 @@ func (h *StoreReceiptHandler) Receipt(c *gin.Context) {
 
 	err := h.db.Transaction(func(tx *gorm.DB) error {
 		var wo models.WorkOrder
-		if err := tx.Where("trace_code = ?", req.TraceCode).First(&wo).Error; err != nil {
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").
+			Where("trace_code = ?", req.TraceCode).First(&wo).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				return fmt.Errorf("invalid trace code")
 			}
@@ -42,7 +43,8 @@ func (h *StoreReceiptHandler) Receipt(c *gin.Context) {
 		}
 
 		var existing models.StoreReceipt
-		err := tx.Where("trace_code = ?", req.TraceCode).First(&existing).Error
+		err := tx.Set("gorm:query_option", "FOR UPDATE").
+			Where("trace_code = ?", req.TraceCode).First(&existing).Error
 
 		if err == nil {
 			if existing.StoreCode != req.StoreCode {

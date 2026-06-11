@@ -105,6 +105,15 @@ func (m *Material) AvailableWeight() float64 {
 	return m.InboundWeight - m.UsedWeight
 }
 
+type TraceCodeSeq struct {
+	ID          uint64    `gorm:"primaryKey" json:"id"`
+	ProductCode string    `gorm:"size:50;not null;index:idx_product_date,unique" json:"product_code"`
+	DateStr     string    `gorm:"size:8;not null;index:idx_product_date,unique" json:"date_str"`
+	Seq         int       `gorm:"not null;default:0" json:"seq"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&Material{},
@@ -113,5 +122,6 @@ func AutoMigrate(db *gorm.DB) error {
 		&WorkOrder{},
 		&WorkOrderMaterialUsage{},
 		&StoreReceipt{},
+		&TraceCodeSeq{},
 	)
 }

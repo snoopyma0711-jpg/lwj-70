@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type CompleteWorkOrderRequest struct {
@@ -31,7 +32,8 @@ func (h *WorkOrderHandler) CompleteWorkOrder(c *gin.Context) {
 
 	err := h.db.Transaction(func(tx *gorm.DB) error {
 		var wo models.WorkOrder
-		if err := tx.Where("order_no = ?", orderNo).First(&wo).Error; err != nil {
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").
+			Where("order_no = ?", orderNo).First(&wo).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				return fmt.Errorf("work order not found")
 			}
@@ -45,13 +47,41 @@ func (h *WorkOrderHandler) CompleteWorkOrder(c *gin.Context) {
 		now := time.Now()
 		dateStr := now.Format("20060102")
 
-		var seq int64
-		tx.Model(&models.WorkOrder{}).
-			Where("product_code = ? AND trace_code LIKE ?", wo.ProductCode, wo.ProductCode+"-"+dateStr+"%").
-			Count(&seq)
-		seq++
+		var seqRecord models.TraceCodeSeq
+		err := tx.Set("gorm:query_option", "FOR UPDATE").
+			Where("product_code = ? AND date_str = ?", wo.ProductCode, dateStr).
+			First(&seqRecord).Error
 
-		traceCode := fmt.Sprintf("%s-%s-%04d", wo.ProductCode, dateStr, seq)
+		if err == gorm.ErrRecordNotFound {
+			seqRecord = models.TraceCodeSeq{
+				ProductCode: wo.ProductCode,
+				DateStr:     dateStr,
+				Seq:         1,
+			}
+			err = tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "product_code"}, {Name: "date_str"}},
+				DoUpdates: clause.Assignments(map[string]interface{}{"seq": gorm.Expr("trace_code_seqs.seq + 1")}),
+			}).Create(&seqRecord).Error
+			if err != nil {
+				return err
+			}
+			if seqRecord.Seq == 0 || seqRecord.ID == 0 {
+				if err := tx.Set("gorm:query_option", "FOR UPDATE").
+					Where("product_code = ? AND date_str = ?", wo.ProductCode, dateStr).
+					First(&seqRecord).Error; err != nil {
+					return err
+				}
+			}
+		} else if err != nil {
+			return err
+		} else {
+			seqRecord.Seq += 1
+			if err := tx.Save(&seqRecord).Error; err != nil {
+				return err
+			}
+		}
+
+		traceCode := fmt.Sprintf("%s-%s-%04d", wo.ProductCode, dateStr, seqRecord.Seq)
 
 		wo.Status = models.WorkOrderStatusDone
 		wo.ActualQuantity = req.ActualQuantity
@@ -85,4 +115,10 @@ func (h *WorkOrderHandler) CompleteWorkOrder(c *gin.Context) {
 		"order_no":   wo.OrderNo,
 		"status":     wo.Status,
 	})
+}
+
+func (h *WorkOrderHandler) ListWorkOrders(c *gin.Context) {
+	var workOrders []models.WorkOrder
+	h.db.Order("created_at DESC").Find(&workOrders)
+	c.JSON(http.StatusOK, workOrders)
 }

@@ -44,6 +44,7 @@ func main() {
 		workorders := api.Group("/workorders")
 		{
 			workorders.POST("", workOrderHandler.CreateWorkOrder)
+			workorders.GET("", workOrderHandler.ListWorkOrders)
 			workorders.POST("/:order_no/complete", workOrderHandler.CompleteWorkOrder)
 		}
 

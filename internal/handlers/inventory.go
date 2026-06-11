@@ -46,10 +46,11 @@ func (h *InventoryHandler) Dashboard(c *gin.Context) {
 
 	materialMap := make(map[string]*MaterialInventory)
 	for _, m := range allMaterials {
+		m.UpdateStatus()
 		name := m.Name
 		if _, ok := materialMap[name]; !ok {
 			materialMap[name] = &MaterialInventory{
-				MaterialName:  name,
+				MaterialName:   name,
 				TotalAvailable: 0,
 				WeeklyConsumed: 0,
 				Batches:        []BatchDetail{},
@@ -57,7 +58,7 @@ func (h *InventoryHandler) Dashboard(c *gin.Context) {
 		}
 
 		avail := m.AvailableWeight()
-		if m.Status != models.MaterialStatusExpired && avail > 0 {
+		if !m.ExpiryDate.Before(now) && avail > 0 {
 			materialMap[name].TotalAvailable += avail
 		}
 
