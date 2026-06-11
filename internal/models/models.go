@@ -31,6 +31,7 @@ type Material struct {
 	ExpiryDate      time.Time      `gorm:"not null;index" json:"expiry_date"`
 	InboundWeight   float64        `gorm:"not null;default:0" json:"inbound_weight"`
 	UsedWeight      float64        `gorm:"not null;default:0" json:"used_weight"`
+	LostWeight      float64        `gorm:"not null;default:0" json:"lost_weight"`
 	InboundDate     time.Time      `gorm:"not null;index" json:"inbound_date"`
 	Status          MaterialStatus `gorm:"size:20;not null;index" json:"status"`
 	CreatedAt       time.Time      `json:"created_at"`
@@ -102,7 +103,19 @@ func (m *Material) UpdateStatus() {
 }
 
 func (m *Material) AvailableWeight() float64 {
-	return m.InboundWeight - m.UsedWeight
+	return m.InboundWeight - m.UsedWeight - m.LostWeight
+}
+
+type MaterialLoss struct {
+	ID              uint64    `gorm:"primaryKey" json:"id"`
+	MaterialID      uint64    `gorm:"not null;index" json:"material_id"`
+	MaterialName    string    `gorm:"size:100;not null" json:"material_name"`
+	Supplier        string    `gorm:"size:100;not null" json:"supplier"`
+	SupplierBatchNo string    `gorm:"size:100;not null" json:"supplier_batch_no"`
+	LostWeight      float64   `gorm:"not null" json:"lost_weight"`
+	Reason          string    `gorm:"size:500;not null" json:"reason"`
+	Operator        string    `gorm:"size:100;not null" json:"operator"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type TraceCodeSeq struct {
@@ -117,6 +130,7 @@ type TraceCodeSeq struct {
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&Material{},
+		&MaterialLoss{},
 		&Recipe{},
 		&RecipeItem{},
 		&WorkOrder{},

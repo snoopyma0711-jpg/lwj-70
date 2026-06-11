@@ -3,6 +3,7 @@ package handlers
 import (
 	"kitchen-trace/internal/models"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -17,7 +18,7 @@ func NewTraceHandler(db *gorm.DB) *TraceHandler {
 }
 
 type MaterialBatchInfo struct {
-	MaterialName    string `json:"material_name"`
+	MaterialName    string  `json:"material_name"`
 	Supplier        string `json:"supplier"`
 	SupplierBatchNo string `json:"supplier_batch_no"`
 	ProductionDate  string `json:"production_date"`
@@ -38,30 +39,14 @@ type TraceResponse struct {
 	ReceiptTime       string             `json:"receipt_time,omitempty"`
 }
 
-func (h *TraceHandler) QueryByTraceCode(c *gin.Context) {
-	traceCode := c.Param("trace_code")
-	if traceCode == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "trace_code is required"})
-		return
-	}
-
-	var wo models.WorkOrder
-	if err := h.db.Where("trace_code = ?", traceCode).First(&wo).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusNotFound, gin.H{"error": "trace code not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
+func buildTraceResponse(tx *gorm.DB, wo models.WorkOrder) TraceResponse {
 	var usages []models.WorkOrderMaterialUsage
-	h.db.Where("work_order_id = ?", wo.ID).Find(&usages)
+	tx.Where("work_order_id = ?", wo.ID).Find(&usages)
 
 	materialBatches := make([]MaterialBatchInfo, 0)
 	for _, u := range usages {
 		var material models.Material
-		h.db.First(&material, u.MaterialID)
+		tx.First(&material, u.MaterialID)
 		materialBatches = append(materialBatches, MaterialBatchInfo{
 			MaterialName:    u.MaterialName,
 			Supplier:        u.Supplier,
@@ -84,12 +69,103 @@ func (h *TraceHandler) QueryByTraceCode(c *gin.Context) {
 	}
 
 	var receipt models.StoreReceipt
-	if err := h.db.Where("trace_code = ?", traceCode).First(&receipt).Error; err == nil {
+	if err := tx.Where("trace_code = ?", wo.TraceCode).First(&receipt).Error; err == nil {
 		resp.StoreCode = receipt.StoreCode
 		resp.ReceiptTime = receipt.ReceiptTime.Format("2006-01-02 15:04:05")
 	}
 
+	return resp
+}
+
+func (h *TraceHandler) QueryByTraceCode(c *gin.Context) {
+	traceCode := c.Param("trace_code")
+	if traceCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trace_code is required"})
+		return
+	}
+
+	var wo models.WorkOrder
+	if err := h.db.Where("trace_code = ?", traceCode).First(&wo).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "trace code not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp := buildTraceResponse(h.db, wo)
 	c.JSON(http.StatusOK, resp)
+}
+
+type BatchTraceRequest struct {
+	TraceCodes []string `json:"trace_codes" binding:"required,min=1,max=100"`
+}
+
+type BatchTraceResult struct {
+	TraceCode string        `json:"trace_code"`
+	Found     bool          `json:"found"`
+	Data      *TraceResponse `json:"data,omitempty"`
+	Error     string        `json:"error,omitempty"`
+}
+
+func (h *TraceHandler) BatchQueryByTraceCodes(c *gin.Context) {
+	var req BatchTraceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	uniqueCodes := make(map[string]bool)
+	for _, code := range req.TraceCodes {
+		code = strings.TrimSpace(code)
+		if code != "" {
+			uniqueCodes[code] = true
+		}
+	}
+
+	codes := make([]string, 0, len(uniqueCodes))
+	for code := range uniqueCodes {
+		codes = append(codes, code)
+	}
+
+	if len(codes) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no valid trace_codes provided"})
+		return
+	}
+
+	var workOrders []models.WorkOrder
+	h.db.Where("trace_code IN ?", codes).Find(&workOrders)
+
+	woMap := make(map[string]models.WorkOrder)
+	for _, wo := range workOrders {
+		woMap[wo.TraceCode] = wo
+	}
+
+	results := make([]BatchTraceResult, 0, len(codes))
+	for _, code := range codes {
+		wo, found := woMap[code]
+		if !found {
+			results = append(results, BatchTraceResult{
+				TraceCode: code,
+				Found:     false,
+				Error:     "trace code not found",
+			})
+			continue
+		}
+		resp := buildTraceResponse(h.db, wo)
+		results = append(results, BatchTraceResult{
+			TraceCode: code,
+			Found:     true,
+			Data:      &resp,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total":   len(codes),
+		"found":   len(workOrders),
+		"results": results,
+	})
 }
 
 type ReverseTraceItem struct {

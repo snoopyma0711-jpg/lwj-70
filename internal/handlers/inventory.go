@@ -26,6 +26,7 @@ type BatchDetail struct {
 	InboundDate     string         `json:"inbound_date"`
 	InboundWeight   float64        `json:"inbound_weight"`
 	UsedWeight      float64        `json:"used_weight"`
+	LostWeight      float64        `json:"lost_weight"`
 	AvailableWeight float64        `json:"available_weight"`
 	Status          models.MaterialStatus `json:"status"`
 }
@@ -71,6 +72,7 @@ func (h *InventoryHandler) Dashboard(c *gin.Context) {
 			InboundDate:     m.InboundDate.Format("2006-01-02"),
 			InboundWeight:   m.InboundWeight,
 			UsedWeight:      m.UsedWeight,
+			LostWeight:      m.LostWeight,
 			AvailableWeight: avail,
 			Status:          m.Status,
 		})

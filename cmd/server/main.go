@@ -33,6 +33,7 @@ func main() {
 		materials := api.Group("/materials")
 		{
 			materials.POST("/inbound", materialHandler.Inbound)
+			materials.POST("/loss", materialHandler.ReportLoss)
 		}
 
 		recipes := api.Group("/recipes")
@@ -51,6 +52,7 @@ func main() {
 		trace := api.Group("/trace")
 		{
 			trace.GET("/:trace_code", traceHandler.QueryByTraceCode)
+			trace.POST("/batch", traceHandler.BatchQueryByTraceCodes)
 			trace.GET("/reverse/material", traceHandler.QueryByMaterialBatch)
 		}
 
