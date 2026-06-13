@@ -25,6 +25,7 @@ func main() {
 	storeReceiptHandler := handlers.NewStoreReceiptHandler(db)
 	inventoryHandler := handlers.NewInventoryHandler(db)
 	recipeHandler := handlers.NewRecipeHandler(db)
+	inspectionHandler := handlers.NewInspectionHandler(db)
 
 	r := gin.Default()
 
@@ -64,6 +65,45 @@ func main() {
 		inventory := api.Group("/inventory")
 		{
 			inventory.GET("/dashboard", inventoryHandler.Dashboard)
+		}
+
+		inspectionTemplates := api.Group("/inspection/templates")
+		{
+			inspectionTemplates.POST("", inspectionHandler.CreateTemplate)
+			inspectionTemplates.GET("", inspectionHandler.ListTemplates)
+			inspectionTemplates.GET("/:id", inspectionHandler.GetTemplate)
+			inspectionTemplates.PUT("/:id", inspectionHandler.UpdateTemplate)
+			inspectionTemplates.DELETE("/:id", inspectionHandler.DeleteTemplate)
+		}
+
+		inspectionTasks := api.Group("/inspection/tasks")
+		{
+			inspectionTasks.POST("/poll", inspectionHandler.PollAndCreateTasks)
+			inspectionTasks.GET("", inspectionHandler.ListTasks)
+			inspectionTasks.GET("/:id", inspectionHandler.GetTask)
+			inspectionTasks.POST("/:id/start", inspectionHandler.StartInspection)
+			inspectionTasks.POST("/:id/submit", inspectionHandler.SubmitInspection)
+		}
+
+		inspectionReports := api.Group("/inspection/reports")
+		{
+			inspectionReports.GET("", inspectionHandler.ListReports)
+			inspectionReports.GET("/:id", inspectionHandler.GetReport)
+			inspectionReports.GET("/trace/:trace_code", inspectionHandler.GetReportByTraceCode)
+		}
+
+		inspectionDisposals := api.Group("/inspection/disposals")
+		{
+			inspectionDisposals.GET("", inspectionHandler.ListDisposals)
+			inspectionDisposals.GET("/:id", inspectionHandler.GetDisposal)
+			inspectionDisposals.PUT("/:id", inspectionHandler.UpdateDisposal)
+			inspectionDisposals.POST("/:id/approve", inspectionHandler.ApproveDisposal)
+			inspectionDisposals.POST("/:id/execute", inspectionHandler.ExecuteDisposal)
+		}
+
+		inspectionStats := api.Group("/inspection")
+		{
+			inspectionStats.GET("/statistics", inspectionHandler.Statistics)
 		}
 	}
 
